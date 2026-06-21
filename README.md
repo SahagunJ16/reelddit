@@ -56,23 +56,27 @@ Guests build their own feed by searching a subreddit and tapping the **star** to
 save it; saved subreddits persist in `localStorage`. Signing in is purely
 additive — the same UI, now backed by your real subscriptions.
 
-> ⚠️ **Guest-mode caveat — app credentials required in production.** Reddit
-> returns **403 to unauthenticated requests from datacenter IPs** (Vercel
-> included), and its public `.json` host isn't reliably CORS-enabled for
-> browsers. So in production, guest browsing uses an **application-only OAuth
-> token** (the `client_credentials` grant — the app authenticates *itself*, no
-> user login) against `oauth.reddit.com`, which is not IP-blocked. This needs
-> `REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET` to be set.
->
-> - **With** app credentials → guest mode works in production (server fetches an
->   app-only token automatically; no user login needed).
-> - **Without** credentials → it falls back to the public `.json` host, which
->   works on `localhost` (residential IP) but is **403-blocked on Vercel**. The
->   feed then shows a "Guest browsing isn't available yet" message.
->
-> Until your Reddit API access is approved (so credentials exist), guest mode
-> works locally but not on the deployed site. Listings are cached ~60s
-> server-side to reduce request volume.
+### How guest fetching avoids the datacenter-IP block
+
+Reddit returns **403 to unauthenticated requests from datacenter IPs** (Vercel
+included). To get around this **without** any app credentials or approval, guest
+mode fetches Reddit's public `.json` endpoints **directly from the user's
+browser** (`lib/reddit/public-client.ts`) — so requests originate from the
+user's **residential IP**, not the server. Reddit serves
+`Access-Control-Allow-Origin: *` on these GETs, so CORS permits it. Images are
+loaded `unoptimized` (straight from the browser) and `v.redd.it` video streams
+are fetched client-side by hls.js, so no Reddit content is proxied through the
+server in guest mode.
+
+- **Signed in** → requests go through the server OAuth proxy (`oauth.reddit.com`
+  with the user's token), which isn't IP-blocked.
+- **Guest** → requests go straight from the browser to `www.reddit.com/*.json`.
+
+> ⚠️ **Caveat:** aggressive browser tracking protection (notably **Safari's
+> "Prevent Cross-Site Tracking"**) can block the cross-site request; the feed
+> then shows a "Can't reach Reddit from your browser" message with the option to
+> sign in. Chrome/Android are unaffected. There's also still no NSFW or personal
+> subscriptions while logged out.
 
 ## Project structure
 

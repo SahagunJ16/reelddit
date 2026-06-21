@@ -2,9 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { Search, X, Loader2, Star } from "lucide-react";
 import type { SubredditInfo } from "@/lib/reddit/types";
 import { useFeedStore } from "@/lib/stores/feed-store";
+import { fetchPublicSearch } from "@/lib/reddit/public-client";
 import { formatCount, cn } from "@/lib/utils";
 
 /**
@@ -15,6 +17,8 @@ import { formatCount, cn } from "@/lib/utils";
  */
 export function SubredditSearch({ onClose }: { onClose: () => void }) {
   const router = useRouter();
+  const { status } = useSession();
+  const authenticated = status === "authenticated";
   const [q, setQ] = useState("");
   const [results, setResults] = useState<SubredditInfo[]>([]);
   const [loading, setLoading] = useState(false);
@@ -37,16 +41,22 @@ export function SubredditSearch({ onClose }: { onClose: () => void }) {
     const ctrl = new AbortController();
     const t = setTimeout(async () => {
       try {
-        const res = await fetch(
-          `/api/reddit/search?q=${encodeURIComponent(q.trim())}`,
-          { signal: ctrl.signal }
-        );
-        if (res.ok) {
-          const data = await res.json();
-          setResults(data.subreddits ?? []);
+        if (authenticated) {
+          // Signed in: use the server OAuth proxy (autocomplete endpoint).
+          const res = await fetch(
+            `/api/reddit/search?q=${encodeURIComponent(q.trim())}`,
+            { signal: ctrl.signal }
+          );
+          if (res.ok) {
+            const data = await res.json();
+            setResults(data.subreddits ?? []);
+          }
+        } else {
+          // Guest: query Reddit directly from the browser (residential IP).
+          setResults(await fetchPublicSearch(q.trim()));
         }
       } catch {
-        /* aborted or network error */
+        /* aborted, CORS, or network error */
       } finally {
         setLoading(false);
       }
@@ -55,7 +65,7 @@ export function SubredditSearch({ onClose }: { onClose: () => void }) {
       clearTimeout(t);
       ctrl.abort();
     };
-  }, [q]);
+  }, [q, authenticated]);
 
   const go = (name: string) => {
     onClose();
