@@ -12,6 +12,7 @@ import type {
 export interface FeedParams {
   mode: FeedMode;
   subreddit?: string; // required when mode === "single"
+  subs?: string[]; // guest mixed-mode: locally-saved subreddit list
   sort: SortOption;
   timeRange: TimeRange;
   nsfw: boolean;
@@ -28,6 +29,9 @@ async function fetchFeedPage(
   if (params.sort === "top") sp.set("t", params.timeRange);
   if (params.mode === "single" && params.subreddit) {
     sp.set("subreddit", params.subreddit);
+  }
+  if (params.mode === "mixed" && params.subs && params.subs.length > 0) {
+    sp.set("subs", params.subs.join(","));
   }
   if (params.nsfw) sp.set("nsfw", "1");
   if (params.shuffle) sp.set("shuffle", "1");
@@ -53,6 +57,7 @@ export function useFeed(params: FeedParams) {
       "feed",
       params.mode,
       params.subreddit ?? "",
+      params.mode === "mixed" ? (params.subs ?? []).join(",") : "",
       params.sort,
       params.sort === "top" ? params.timeRange : "",
       params.nsfw,

@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import {
   RedditAuthError,
   RedditRateLimitError,
+  getRedditCredentials,
+  publicRedditFetch,
   redditFetch,
 } from "@/lib/reddit/client";
 import { classifyListing } from "@/lib/reddit/classify-media";
@@ -27,19 +29,32 @@ const VALID_RANGES: TimeRange[] = [
 // Reddit's multi-subreddit path tolerates ~100 subs; stay conservative.
 const MAX_SUBS_IN_PATH = 90;
 
+// Default starter feed for anonymous (logged-out) users who haven't saved any
+// subreddits yet. Media-heavy, SFW communities.
+const DEFAULT_PUBLIC_SUBS = [
+  "pics",
+  "aww",
+  "videos",
+  "EarthPorn",
+  "NatureIsFuckingLit",
+  "oddlysatisfying",
+  "BeAmazed",
+  "interestingasfuck",
+  "Damnthatsinteresting",
+  "gifs",
+];
+
 /**
  * GET /api/reddit/feed
  *
- * Query params:
- *   mode       "mixed" | "single"        (default mixed)
- *   subreddit  required when mode=single
- *   subs       comma-separated list for mixed mode (optional; otherwise the
- *              server resolves the user's subscriptions)
- *   sort       hot|new|top|rising        (default hot)
- *   t          hour|day|week|month|year|all (for sort=top, default day)
- *   after      Reddit pagination cursor
- *   nsfw       "1" to include over_18 posts
- *   shuffle    "1" to shuffle the returned batch (mixed mode)
+ * Works for BOTH authenticated and anonymous users:
+ *   - Signed in  → OAuth API; mixed mode uses the user's real subscriptions and
+ *                  NSFW is honored per the `nsfw` param.
+ *   - Signed out → public `.json` endpoints; mixed mode uses the `subs` param
+ *                  (the user's locally-saved list) or a default starter set,
+ *                  and NSFW is always off (Reddit hides it from logged-out).
+ *
+ * Query params: mode, subreddit, subs, sort, t, after, nsfw, shuffle.
  */
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
@@ -51,10 +66,14 @@ export async function GET(req: NextRequest) {
     ? sp.get("t")
     : "day") as TimeRange;
   const after = sp.get("after") ?? undefined;
-  const nsfw = sp.get("nsfw") === "1";
   const doShuffle = sp.get("shuffle") === "1";
 
   try {
+    const creds = await getRedditCredentials(req);
+    const authed = !!creds;
+    // NSFW only possible when authenticated.
+    const nsfw = authed && sp.get("nsfw") === "1";
+
     let path: string;
 
     if (mode === "single") {
@@ -73,7 +92,9 @@ export async function GET(req: NextRequest) {
         .filter(Boolean);
 
       if (subs.length === 0) {
-        subs = await resolveUserSubreddits(req);
+        subs = authed
+          ? await resolveUserSubreddits(req)
+          : DEFAULT_PUBLIC_SUBS;
       }
       if (subs.length === 0) {
         return NextResponse.json<FeedResponse>({ posts: [], after: null });
@@ -82,13 +103,15 @@ export async function GET(req: NextRequest) {
       path = `/r/${joined}/${sort}`;
     }
 
-    const listing = (await redditFetch(req, path, {
-      searchParams: {
-        limit: "50",
-        after,
-        t: sort === "top" ? t : undefined,
-      },
-    })) as RedditListing;
+    const searchParams = {
+      limit: "50",
+      after,
+      t: sort === "top" ? t : undefined,
+    };
+
+    const listing = (authed
+      ? await redditFetch(req, path, { searchParams })
+      : await publicRedditFetch(`${path}.json`, searchParams)) as RedditListing;
 
     let posts = classifyListing(listing.data.children, { nsfw });
     if (doShuffle && mode === "mixed") {

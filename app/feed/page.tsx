@@ -1,12 +1,12 @@
-import { redirect } from "next/navigation";
-import { auth } from "@/lib/auth";
 import { FeedView } from "@/components/feed/FeedView";
 
 export const dynamic = "force-dynamic";
 
-/** Mixed feed: interleaved media across all the user's joined subreddits. */
-export default async function FeedPage() {
-  const session = await auth();
-  if (!session) redirect("/login");
+/**
+ * Mixed feed. Open to everyone:
+ *   - guests get a public feed from their saved subreddits (or a default set);
+ *   - signed-in users get their joined subreddits.
+ */
+export default function FeedPage() {
   return <FeedView />;
 }

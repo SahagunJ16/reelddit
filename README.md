@@ -12,6 +12,7 @@ OAuth login** and smooth, infinite, snap-scrolling media.
 
 ## Features
 
+- **Login is optional.** Browse as a **guest** (public Reddit `.json`, no account) or **sign in with Reddit** for the personalized version. See [Guest mode vs. signed in](#guest-mode-vs-signed-in).
 - **Continue with Reddit** OAuth2 login (Auth.js) — your Reddit account _is_ your account.
 - **Vertical snap-scroll feed**, one post per screen, dark immersive UI.
 - **Mixed feed** across all joined subs (batched `/r/sub1+sub2+.../sort`) or a **single subreddit**.
@@ -36,6 +37,29 @@ Zustand · Tailwind CSS · hls.js · lucide-react · Supabase _(optional, see be
 > `localStorage` / `sessionStorage`. The Supabase code is kept intact but stays
 > dormant unless its env vars are provided. See
 > [Re-enabling Supabase later](#re-enabling-supabase-later).
+
+## Guest mode vs. signed in
+
+Reelddit works **without a Reddit login**, so it's usable today even while Data
+API access is pending approval.
+
+| | Guest (no login) | Signed in with Reddit |
+|---|---|---|
+| Data source | Public `.json` endpoints | OAuth Data API |
+| Mixed feed | Your **locally-saved** subreddits (⭐ in search), or a default starter set | Your **actual joined** subreddits (`mysubreddits`) |
+| Browse any public subreddit | ✅ | ✅ |
+| Subreddit search | ✅ | ✅ |
+| NSFW toggle | ❌ (Reddit hides it from logged-out) | ✅ |
+| "Save" subreddits | localStorage only | localStorage (+ real subscriptions) |
+
+Guests build their own feed by searching a subreddit and tapping the **star** to
+save it; saved subreddits persist in `localStorage`. Signing in is purely
+additive — the same UI, now backed by your real subscriptions.
+
+> ⚠️ **Guest-mode caveat:** Reddit throttles unauthenticated requests and can
+> block datacenter IPs (e.g. Vercel), so the public feed may be flaky in
+> production. Public listings are cached ~60s server-side to reduce volume. The
+> personalized signed-in path uses your per-user token and isn't affected.
 
 ## Project structure
 
