@@ -38,11 +38,15 @@ async function fetchFeedPage(
   if (after) sp.set("after", after);
 
   const res = await fetch(`/api/reddit/feed?${sp.toString()}`);
-  if (res.status === 401) {
-    throw new Error("unauthenticated");
-  }
   if (!res.ok) {
-    throw new Error(`feed request failed: ${res.status}`);
+    let code = `feed_request_failed_${res.status}`;
+    try {
+      const body = await res.json();
+      if (body?.error) code = body.error as string;
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new Error(code);
   }
   return res.json();
 }

@@ -153,16 +153,24 @@ export function FeedContainer({
   if (isLoading) return <FeedSkeleton />;
 
   if (isError) {
-    const unauth = (error as Error)?.message === "unauthenticated";
+    const code = (error as Error)?.message;
+    const unauth = code === "unauthenticated";
+    const blocked = code === "reddit_blocked";
     return (
       <div className="flex h-[100dvh] flex-col items-center justify-center gap-4 bg-black px-6 text-center text-white">
         <p className="text-lg font-semibold">
-          {unauth ? "Your session expired" : "Couldn't load the feed"}
+          {unauth
+            ? "Your session expired"
+            : blocked
+              ? "Guest browsing isn't available yet"
+              : "Couldn't load the feed"}
         </p>
-        <p className="text-sm text-white/60">
+        <p className="max-w-xs text-sm text-white/60">
           {unauth
             ? "Please sign in with Reddit again."
-            : "Reddit may be rate-limiting or unreachable. Try again."}
+            : blocked
+              ? "Reddit blocks anonymous requests from servers. This needs the app's Reddit API credentials — sign in, or set them once your API access is approved."
+              : "Reddit may be rate-limiting or unreachable. Try again."}
         </p>
         <button
           onClick={() => refetch()}

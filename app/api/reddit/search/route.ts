@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import {
   RedditAuthError,
+  RedditBlockedError,
   RedditRateLimitError,
   getRedditCredentials,
   publicRedditFetch,
@@ -54,7 +55,7 @@ export async function GET(req: NextRequest) {
       )) as { data: { children: SubredditChild[] } };
       children = data.data.children;
     } else {
-      const data = (await publicRedditFetch("/subreddits/search.json", {
+      const data = (await publicRedditFetch("/subreddits/search", {
         q,
         limit: "10",
         include_over_18: "false",
@@ -85,6 +86,10 @@ export async function GET(req: NextRequest) {
     }
     if (err instanceof RedditRateLimitError) {
       return NextResponse.json({ error: "rate_limited" }, { status: 429 });
+    }
+    if (err instanceof RedditBlockedError) {
+      // Guest search needs app credentials in production; degrade quietly.
+      return NextResponse.json({ subreddits: [] });
     }
     console.error("[api/search]", err);
     return NextResponse.json({ error: "internal_error" }, { status: 500 });
