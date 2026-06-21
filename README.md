@@ -27,8 +27,15 @@ OAuth login** and smooth, infinite, snap-scrolling media.
 
 ## Tech stack
 
-Next.js 14 (App Router) · Auth.js (custom Reddit provider) · Supabase (encrypted
-token storage) · TanStack Query · Zustand · Tailwind CSS · hls.js · lucide-react.
+Next.js 14 (App Router) · Auth.js (custom Reddit provider) · TanStack Query ·
+Zustand · Tailwind CSS · hls.js · lucide-react · Supabase _(optional, see below)_.
+
+> **Supabase is currently on hold.** The app runs fully without it: Reddit
+> tokens live in the encrypted Auth.js session cookie, and all user settings
+> (sort, NSFW, mute, shuffle, resume position) live in the browser via
+> `localStorage` / `sessionStorage`. The Supabase code is kept intact but stays
+> dormant unless its env vars are provided. See
+> [Re-enabling Supabase later](#re-enabling-supabase-later).
 
 ## Project structure
 
@@ -68,34 +75,67 @@ http://localhost:3000/api/auth/callback/reddit
 
 Note the **client id** (under the app name) and **secret**.
 
-### 2. (Optional) Create a Supabase project
-
-Run [`supabase/schema.sql`](./supabase/schema.sql) in the SQL editor. Grab the
-project URL and the **service role** key. _Without Supabase the app still works_
-— tokens then live only in the encrypted Auth.js session cookie.
-
-### 3. Configure environment
+### 2. Configure environment
 
 ```bash
 cp .env.example .env.local
-# fill in AUTH_SECRET, REDDIT_CLIENT_ID/SECRET, REDDIT_USER_AGENT,
-# TOKEN_ENCRYPTION_KEY, and (optionally) SUPABASE_URL/SERVICE_ROLE_KEY
+# fill in AUTH_SECRET, AUTH_URL, REDDIT_CLIENT_ID/SECRET, REDDIT_USER_AGENT
 ```
 
-Generate secrets:
+Generate the secret:
 
 ```bash
 openssl rand -base64 32   # AUTH_SECRET
-openssl rand -base64 32   # TOKEN_ENCRYPTION_KEY
 ```
 
-### 4. Run
+Supabase env vars are intentionally left blank — see
+[Re-enabling Supabase later](#re-enabling-supabase-later).
+
+### 3. Run
 
 ```bash
 npm install
 npm run dev
 # open http://localhost:3000
 ```
+
+## Environment variables
+
+| Variable | Required | Notes |
+|---|---|---|
+| `AUTH_SECRET` | ✅ | `openssl rand -base64 32` |
+| `AUTH_URL` | ✅ local · auto on Vercel | Base URL. On Vercel, Auth.js auto-detects it — only set for a custom domain. |
+| `REDDIT_CLIENT_ID` | ✅ | From reddit.com/prefs/apps |
+| `REDDIT_CLIENT_SECRET` | ✅ | From reddit.com/prefs/apps |
+| `REDDIT_USER_AGENT` | ✅ | e.g. `web:reelddit:0.1.0 (by /u/you)` |
+| `TOKEN_ENCRYPTION_KEY` | ⛔ on hold | Only used when Supabase is enabled |
+| `SUPABASE_URL` | ⛔ on hold | Leave unset to keep the DB dormant |
+| `SUPABASE_SERVICE_ROLE_KEY` | ⛔ on hold | Leave unset to keep the DB dormant |
+
+## Deploying to Vercel
+
+1. Import the repo into Vercel (framework preset: **Next.js**, no special config).
+2. Add the **required** env vars above in **Project → Settings → Environment
+   Variables** (skip the Supabase ones). `AUTH_URL` can be omitted on the
+   default `*.vercel.app` domain.
+3. In your Reddit app (reddit.com/prefs/apps), set the redirect URI to your
+   deployed callback, e.g.:
+   ```
+   https://<your-project>.vercel.app/api/auth/callback/reddit
+   ```
+   (add the `http://localhost:3000/...` one too if you also run locally).
+4. Deploy. Visit the site → **Continue with Reddit**.
+
+## Re-enabling Supabase later
+
+When you're off the Supabase limit and want cross-device persistence:
+
+1. Run [`supabase/schema.sql`](./supabase/schema.sql) in the SQL editor.
+2. Set `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `TOKEN_ENCRYPTION_KEY`
+   (`openssl rand -base64 32`).
+3. Redeploy. The dormant DB layer activates automatically — tokens get
+   encrypted-at-rest in Postgres instead of living only in the session cookie.
+   No code changes required.
 
 ## How the feed works
 

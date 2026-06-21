@@ -4,6 +4,13 @@ import { decrypt, encrypt } from "./crypto";
 /**
  * Server-side Supabase access for the (encrypted) token store.
  *
+ * ⚠️ CURRENTLY DORMANT / ON HOLD. This layer only activates when both
+ * SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are set (see `isDbConfigured`).
+ * While unset, every function here no-ops and Reddit tokens live solely in the
+ * encrypted Auth.js session cookie — no database is touched. The code is kept
+ * intact so persistence (and cross-device prefs) can be switched on later by
+ * running supabase/schema.sql and providing the env vars.
+ *
  * Uses the service-role key, so this module must NEVER be imported into a
  * client component. RLS denies everything by default; the service role bypasses
  * it.
