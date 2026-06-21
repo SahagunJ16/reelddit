@@ -141,3 +141,40 @@ export class RedditRateLimitError extends Error {
     super("Reddit rate limit exceeded");
   }
 }
+
+const PUBLIC_BASE = "https://www.reddit.com";
+
+/**
+ * Unauthenticated GET against Reddit's public `.json` endpoints (guest mode).
+ *
+ * No OAuth token required, so this works before Data API access is approved.
+ * Limitations: logged-out requests can't see NSFW content or a user's
+ * subscriptions, and Reddit may rate-limit/block datacenter IPs. A descriptive
+ * User-Agent is still required to avoid aggressive throttling.
+ */
+export async function publicRedditFetch(
+  path: string,
+  searchParams?: Record<string, string | undefined>
+): Promise<unknown> {
+  const url = new URL(
+    path.startsWith("http") ? path : `${PUBLIC_BASE}${path}`
+  );
+  if (searchParams) {
+    for (const [k, v] of Object.entries(searchParams)) {
+      if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, v);
+    }
+  }
+  url.searchParams.set("raw_json", "1");
+
+  const res = await fetch(url.toString(), {
+    headers: { "User-Agent": REDDIT_USER_AGENT },
+    // Cache public listings briefly to cut request volume against Reddit.
+    next: { revalidate: 60 },
+  });
+
+  if (res.status === 429) throw new RedditRateLimitError();
+  if (!res.ok) {
+    throw new Error(`Reddit public API error ${res.status} for ${path}`);
+  }
+  return res.json();
+}

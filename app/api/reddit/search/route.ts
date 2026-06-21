@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import {
   RedditAuthError,
   RedditRateLimitError,
+  getRedditCredentials,
+  publicRedditFetch,
   redditFetch,
 } from "@/lib/reddit/client";
 import type { SubredditInfo } from "@/lib/reddit/types";
@@ -9,9 +11,22 @@ import { decodeHtml } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
+interface SubredditChild {
+  data: {
+    display_name: string;
+    display_name_prefixed: string;
+    title: string;
+    community_icon?: string;
+    icon_img?: string;
+    subscribers?: number;
+    over18?: boolean;
+  };
+}
+
 /**
  * GET /api/reddit/search?q=<query>
- * Subreddit-name autocomplete (no user/post search — out of scope).
+ * Subreddit-name search. Uses the OAuth autocomplete endpoint when signed in,
+ * and falls back to the public `subreddits/search.json` endpoint for guests.
  */
 export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams.get("q")?.trim() ?? "";
@@ -20,31 +35,34 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const data = (await redditFetch(req, "/api/subreddit_autocomplete_v2", {
-      searchParams: {
-        query: q,
-        limit: "10",
-        include_over_18: "true",
-        include_profiles: "false",
-        typeahead_active: "true",
-      },
-    })) as {
-      data: {
-        children: {
-          data: {
-            display_name: string;
-            display_name_prefixed: string;
-            title: string;
-            community_icon?: string;
-            icon_img?: string;
-            subscribers?: number;
-            over18?: boolean;
-          };
-        }[];
-      };
-    };
+    const creds = await getRedditCredentials(req);
 
-    const subreddits: SubredditInfo[] = data.data.children.map((c) => {
+    let children: SubredditChild[];
+    if (creds) {
+      const data = (await redditFetch(
+        req,
+        "/api/subreddit_autocomplete_v2",
+        {
+          searchParams: {
+            query: q,
+            limit: "10",
+            include_over_18: "true",
+            include_profiles: "false",
+            typeahead_active: "true",
+          },
+        }
+      )) as { data: { children: SubredditChild[] } };
+      children = data.data.children;
+    } else {
+      const data = (await publicRedditFetch("/subreddits/search.json", {
+        q,
+        limit: "10",
+        include_over_18: "false",
+      })) as { data: { children: SubredditChild[] } };
+      children = data.data.children;
+    }
+
+    const subreddits: SubredditInfo[] = children.map((c) => {
       const d = c.data;
       return {
         name: d.display_name.toLowerCase(),

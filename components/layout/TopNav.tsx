@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { signOut } from "next-auth/react";
+import { signIn, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import {
   Search,
@@ -9,6 +9,7 @@ import {
   EyeOff,
   Eye,
   LogOut,
+  LogIn,
   Home,
 } from "lucide-react";
 import { useFeedStore } from "@/lib/stores/feed-store";
@@ -17,19 +18,20 @@ import { SubredditSearch } from "@/components/search/SubredditSearch";
 import { cn } from "@/lib/utils";
 
 /**
- * Top navigation overlay for the feed: search trigger, mode/NSFW/shuffle
- * toggles, sort filter bar, and logout.
+ * Top navigation overlay for the feed: search trigger, NSFW/shuffle toggles,
+ * sort filter bar, and sign in / out.
  *
- * `mode` controls the leading button: on the mixed feed it's hidden (we're
- * already home); on a single-subreddit feed it becomes a "back to mixed feed"
- * home button.
+ * `mode` controls the leading button (home button on single-subreddit feeds).
+ * `authenticated` gates Reddit-account perks: NSFW toggle + logout vs. sign-in.
  */
 export function TopNav({
   mode = "mixed",
   subtitle,
+  authenticated = false,
 }: {
   mode?: "mixed" | "single";
   subtitle?: string;
+  authenticated?: boolean;
 }) {
   const router = useRouter();
   const [searchOpen, setSearchOpen] = useState(false);
@@ -52,6 +54,11 @@ export function TopNav({
                   {subtitle}
                 </span>
               )}
+              {!authenticated && !subtitle && (
+                <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs font-medium text-white/70">
+                  Guest
+                </span>
+              )}
             </div>
             <SortFilterBar />
           </div>
@@ -72,22 +79,37 @@ export function TopNav({
             >
               <Shuffle size={18} />
             </IconButton>
+            {authenticated && (
+              <IconButton
+                label="Toggle NSFW"
+                active={nsfw}
+                onClick={() => setNsfw(!nsfw)}
+              >
+                {nsfw ? <Eye size={18} /> : <EyeOff size={18} />}
+              </IconButton>
+            )}
             <IconButton
-              label="Toggle NSFW"
-              active={nsfw}
-              onClick={() => setNsfw(!nsfw)}
+              label="Search subreddits"
+              onClick={() => setSearchOpen(true)}
             >
-              {nsfw ? <Eye size={18} /> : <EyeOff size={18} />}
-            </IconButton>
-            <IconButton label="Search subreddits" onClick={() => setSearchOpen(true)}>
               <Search size={18} />
             </IconButton>
-            <IconButton
-              label="Log out"
-              onClick={() => signOut({ callbackUrl: "/login" })}
-            >
-              <LogOut size={18} />
-            </IconButton>
+            {authenticated ? (
+              <IconButton
+                label="Log out"
+                onClick={() => signOut({ callbackUrl: "/feed" })}
+              >
+                <LogOut size={18} />
+              </IconButton>
+            ) : (
+              <button
+                onClick={() => signIn("reddit", { callbackUrl: "/feed" })}
+                className="flex items-center gap-1.5 rounded-full bg-reddit px-3 py-2 text-xs font-semibold text-white transition hover:brightness-110"
+              >
+                <LogIn size={15} />
+                Sign in
+              </button>
+            )}
           </div>
         </div>
       </div>
