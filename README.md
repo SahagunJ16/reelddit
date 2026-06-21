@@ -56,27 +56,25 @@ Guests build their own feed by searching a subreddit and tapping the **star** to
 save it; saved subreddits persist in `localStorage`. Signing in is purely
 additive — the same UI, now backed by your real subscriptions.
 
-### How guest fetching avoids the datacenter-IP block
+### Reddit access requires credentials (verified)
 
-Reddit returns **403 to unauthenticated requests from datacenter IPs** (Vercel
-included). To get around this **without** any app credentials or approval, guest
-mode fetches Reddit's public `.json` endpoints **directly from the user's
-browser** (`lib/reddit/public-client.ts`) — so requests originate from the
-user's **residential IP**, not the server. Reddit serves
-`Access-Control-Allow-Origin: *` on these GETs, so CORS permits it. Images are
-loaded `unoptimized` (straight from the browser) and `v.redd.it` video streams
-are fetched client-side by hls.js, so no Reddit content is proxied through the
-server in guest mode.
+Reddit's API lockdown is comprehensive — there is **no unauthenticated path**:
 
-- **Signed in** → requests go through the server OAuth proxy (`oauth.reddit.com`
-  with the user's token), which isn't IP-blocked.
-- **Guest** → requests go straight from the browser to `www.reddit.com/*.json`.
+- **Server-side from a datacenter IP** (Vercel) → `403` on everything, incl. `.json`, `old.reddit`, and RSS.
+- **Client-side from the browser** → blocked by **CORS** (Reddit no longer sends `Access-Control-Allow-Origin`).
+- **Residential IPs** are throttled/blocked for unauthenticated `.json` too.
 
-> ⚠️ **Caveat:** aggressive browser tracking protection (notably **Safari's
-> "Prevent Cross-Site Tracking"**) can block the cross-site request; the feed
-> then shows a "Can't reach Reddit from your browser" message with the option to
-> sign in. Chrome/Android are unaffected. There's also still no NSFW or personal
-> subscriptions while logged out.
+So all access goes through the server with an OAuth token:
+
+- **Guest browsing** → an **application-only token** (`client_credentials`
+  grant — the app authenticates itself, no user login) against
+  `oauth.reddit.com`. Needs `REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET`.
+- **Signed in** → the user's OAuth token against `oauth.reddit.com`.
+
+Both require an **approved Reddit app**. Until credentials are set, the feed
+shows a clear "Reddit blocked the request" message. Images are still loaded
+`unoptimized` (directly in the browser — image CDNs aren't blocked) and
+`v.redd.it` video streams via hls.js, so only the listing JSON needs the token.
 
 ## Project structure
 
