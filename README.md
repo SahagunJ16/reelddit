@@ -56,10 +56,23 @@ Guests build their own feed by searching a subreddit and tapping the **star** to
 save it; saved subreddits persist in `localStorage`. Signing in is purely
 additive — the same UI, now backed by your real subscriptions.
 
-> ⚠️ **Guest-mode caveat:** Reddit throttles unauthenticated requests and can
-> block datacenter IPs (e.g. Vercel), so the public feed may be flaky in
-> production. Public listings are cached ~60s server-side to reduce volume. The
-> personalized signed-in path uses your per-user token and isn't affected.
+> ⚠️ **Guest-mode caveat — app credentials required in production.** Reddit
+> returns **403 to unauthenticated requests from datacenter IPs** (Vercel
+> included), and its public `.json` host isn't reliably CORS-enabled for
+> browsers. So in production, guest browsing uses an **application-only OAuth
+> token** (the `client_credentials` grant — the app authenticates *itself*, no
+> user login) against `oauth.reddit.com`, which is not IP-blocked. This needs
+> `REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET` to be set.
+>
+> - **With** app credentials → guest mode works in production (server fetches an
+>   app-only token automatically; no user login needed).
+> - **Without** credentials → it falls back to the public `.json` host, which
+>   works on `localhost` (residential IP) but is **403-blocked on Vercel**. The
+>   feed then shows a "Guest browsing isn't available yet" message.
+>
+> Until your Reddit API access is approved (so credentials exist), guest mode
+> works locally but not on the deployed site. Listings are cached ~60s
+> server-side to reduce request volume.
 
 ## Project structure
 

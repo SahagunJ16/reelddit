@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import {
   RedditAuthError,
+  RedditBlockedError,
   RedditRateLimitError,
   getRedditCredentials,
   publicRedditFetch,
@@ -111,7 +112,7 @@ export async function GET(req: NextRequest) {
 
     const listing = (authed
       ? await redditFetch(req, path, { searchParams })
-      : await publicRedditFetch(`${path}.json`, searchParams)) as RedditListing;
+      : await publicRedditFetch(path, searchParams)) as RedditListing;
 
     let posts = classifyListing(listing.data.children, { nsfw });
     if (doShuffle && mode === "mixed") {
@@ -129,6 +130,9 @@ export async function GET(req: NextRequest) {
     }
     if (err instanceof RedditRateLimitError) {
       return NextResponse.json({ error: "rate_limited" }, { status: 429 });
+    }
+    if (err instanceof RedditBlockedError) {
+      return NextResponse.json({ error: "reddit_blocked" }, { status: 502 });
     }
     console.error("[api/feed]", err);
     return NextResponse.json({ error: "internal_error" }, { status: 500 });

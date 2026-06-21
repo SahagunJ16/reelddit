@@ -141,24 +141,79 @@ export class RedditRateLimitError extends Error {
     super("Reddit rate limit exceeded");
   }
 }
+/** Reddit refused an unauthenticated request (typically a datacenter-IP block). */
+export class RedditBlockedError extends Error {
+  constructor() {
+    super("Reddit blocked the request (no app credentials for guest browsing)");
+  }
+}
 
 const PUBLIC_BASE = "https://www.reddit.com";
 
+// Cached application-only token (client_credentials grant) for guest browsing.
+let appTokenCache: { token: string; expiresAt: number } | null = null;
+
 /**
- * Unauthenticated GET against Reddit's public `.json` endpoints (guest mode).
+ * Obtain (and cache) an application-only OAuth token via the client_credentials
+ * grant. This authenticates the *app itself* — no user login — and lets guest
+ * browsing hit `oauth.reddit.com`, which (unlike the public `.json` host) is
+ * not blocked for datacenter IPs. Returns null if app credentials aren't set.
+ */
+async function getAppOnlyToken(): Promise<string | null> {
+  const id = process.env.REDDIT_CLIENT_ID;
+  const secret = process.env.REDDIT_CLIENT_SECRET;
+  if (!id || !secret) return null;
+
+  if (appTokenCache && Date.now() < appTokenCache.expiresAt - 60_000) {
+    return appTokenCache.token;
+  }
+
+  const basic = Buffer.from(`${id}:${secret}`).toString("base64");
+  const res = await fetch("https://www.reddit.com/api/v1/access_token", {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${basic}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+      "User-Agent": REDDIT_USER_AGENT,
+    },
+    body: new URLSearchParams({ grant_type: "client_credentials" }),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    console.error("[reddit] app-only token request failed", res.status);
+    return null;
+  }
+  const data = (await res.json()) as {
+    access_token: string;
+    expires_in: number;
+  };
+  appTokenCache = {
+    token: data.access_token,
+    expiresAt: Date.now() + data.expires_in * 1000,
+  };
+  return appTokenCache.token;
+}
+
+/**
+ * GET against Reddit for guest (no user login) browsing.
  *
- * No OAuth token required, so this works before Data API access is approved.
- * Limitations: logged-out requests can't see NSFW content or a user's
- * subscriptions, and Reddit may rate-limit/block datacenter IPs. A descriptive
- * User-Agent is still required to avoid aggressive throttling.
+ * Prefers an application-only OAuth token against `oauth.reddit.com` — this is
+ * the only path that works from a deployed/datacenter host, and it needs just
+ * the app's client id/secret (no user auth). Falls back to the public `.json`
+ * host when no credentials are configured (fine for local dev on a residential
+ * IP, but blocked with 403 from cloud IPs).
+ *
+ * `path` must be given WITHOUT a `.json` suffix (e.g. `/r/pics/hot`).
  */
 export async function publicRedditFetch(
   path: string,
   searchParams?: Record<string, string | undefined>
 ): Promise<unknown> {
-  const url = new URL(
-    path.startsWith("http") ? path : `${PUBLIC_BASE}${path}`
-  );
+  const token = await getAppOnlyToken();
+
+  const base = token ? OAUTH_BASE : PUBLIC_BASE;
+  const suffix = token ? "" : ".json";
+  const url = new URL(`${base}${path}${suffix}`);
   if (searchParams) {
     for (const [k, v] of Object.entries(searchParams)) {
       if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, v);
@@ -167,12 +222,19 @@ export async function publicRedditFetch(
   url.searchParams.set("raw_json", "1");
 
   const res = await fetch(url.toString(), {
-    headers: { "User-Agent": REDDIT_USER_AGENT },
+    headers: {
+      "User-Agent": REDDIT_USER_AGENT,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     // Cache public listings briefly to cut request volume against Reddit.
     next: { revalidate: 60 },
   });
 
   if (res.status === 429) throw new RedditRateLimitError();
+  if (res.status === 403) {
+    // Almost always the datacenter-IP block on the unauthenticated host.
+    throw new RedditBlockedError();
+  }
   if (!res.ok) {
     throw new Error(`Reddit public API error ${res.status} for ${path}`);
   }
