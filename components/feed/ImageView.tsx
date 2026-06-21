@@ -40,7 +40,9 @@ export function ImageView({
         className="object-contain"
         onLoad={() => setLoaded(true)}
         onError={() => onError?.()}
-        unoptimized={post.imageUrl.endsWith(".gif")}
+        // Load directly in the browser (no Vercel-side optimizer fetch) so guest
+        // images come from the user's IP, consistent with the client-side feed.
+        unoptimized
         priority={false}
       />
     </div>

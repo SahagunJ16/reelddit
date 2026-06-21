@@ -39,6 +39,7 @@ export function FeedView({ subreddit }: { subreddit?: string }) {
     timeRange,
     nsfw: authenticated ? nsfw : false,
     shuffle,
+    authenticated,
   };
 
   const feedKey = [

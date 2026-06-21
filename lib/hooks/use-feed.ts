@@ -8,6 +8,7 @@ import type {
   SortOption,
   TimeRange,
 } from "@/lib/reddit/types";
+import { fetchPublicFeed } from "@/lib/reddit/public-client";
 
 export interface FeedParams {
   mode: FeedMode;
@@ -17,12 +18,30 @@ export interface FeedParams {
   timeRange: TimeRange;
   nsfw: boolean;
   shuffle: boolean;
+  /** Signed in → use the server OAuth proxy; guest → fetch Reddit client-side. */
+  authenticated: boolean;
 }
 
 async function fetchFeedPage(
   params: FeedParams,
   after: string | null
 ): Promise<FeedResponse> {
+  // Guests fetch Reddit directly from the browser (residential IP) to avoid the
+  // datacenter-IP 403 and skip the need for app credentials.
+  if (!params.authenticated) {
+    return fetchPublicFeed(
+      {
+        mode: params.mode,
+        subreddit: params.subreddit,
+        subs: params.subs,
+        sort: params.sort,
+        timeRange: params.timeRange,
+        shuffle: params.shuffle,
+      },
+      after
+    );
+  }
+
   const sp = new URLSearchParams();
   sp.set("mode", params.mode);
   sp.set("sort", params.sort);
@@ -59,6 +78,7 @@ export function useFeed(params: FeedParams) {
   const query = useInfiniteQuery({
     queryKey: [
       "feed",
+      params.authenticated ? "auth" : "guest",
       params.mode,
       params.subreddit ?? "",
       params.mode === "mixed" ? (params.subs ?? []).join(",") : "",
