@@ -23,13 +23,6 @@ interface FeedState {
   setMode: (m: FeedMode) => void;
   setNsfw: (v: boolean) => void;
   toggleShuffle: () => void;
-
-  // "Saved" subreddits for guests (no Reddit account) — the local stand-in for
-  // a subscription list. Stored as lowercase names.
-  savedSubreddits: string[];
-  saveSubreddit: (name: string) => void;
-  unsaveSubreddit: (name: string) => void;
-  isSaved: (name: string) => boolean;
 }
 
 /**
@@ -39,7 +32,7 @@ interface FeedState {
  */
 export const useFeedStore = create<FeedState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       muted: true,
       setMuted: (m) => set({ muted: m }),
       toggleMuted: () => set((s) => ({ muted: !s.muted })),
@@ -58,21 +51,6 @@ export const useFeedStore = create<FeedState>()(
       setMode: (mode) => set({ mode }),
       setNsfw: (nsfw) => set({ nsfw }),
       toggleShuffle: () => set((s) => ({ shuffle: !s.shuffle })),
-
-      savedSubreddits: [],
-      saveSubreddit: (name) =>
-        set((s) => {
-          const n = name.toLowerCase();
-          if (s.savedSubreddits.includes(n)) return s;
-          return { savedSubreddits: [...s.savedSubreddits, n] };
-        }),
-      unsaveSubreddit: (name) =>
-        set((s) => ({
-          savedSubreddits: s.savedSubreddits.filter(
-            (x) => x !== name.toLowerCase()
-          ),
-        })),
-      isSaved: (name) => get().savedSubreddits.includes(name.toLowerCase()),
     }),
     {
       name: "reelddit-prefs",
@@ -83,7 +61,6 @@ export const useFeedStore = create<FeedState>()(
         mode: s.mode,
         nsfw: s.nsfw,
         shuffle: s.shuffle,
-        savedSubreddits: s.savedSubreddits,
       }),
     }
   )

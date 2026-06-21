@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { LoginButton } from "./LoginButton";
@@ -16,25 +15,16 @@ export default async function LoginPage() {
           reel<span className="text-reddit">ddit</span>
         </h1>
         <p className="max-w-sm text-balance text-white/60">
-          A swipeable, vertical feed of Reddit media. Sign in to pull in the
-          subreddits you already follow — or just start browsing.
+          Your joined subreddits as an endless, swipeable vertical feed. No
+          uploads, no likes, no noise — just media.
         </p>
       </div>
 
-      <div className="flex flex-col items-center gap-3">
-        <LoginButton />
-        <Link
-          href="/feed"
-          className="text-sm font-medium text-white/60 underline-offset-4 hover:text-white hover:underline"
-        >
-          Browse as guest
-        </Link>
-      </div>
+      <LoginButton />
 
       <p className="max-w-xs text-xs text-white/30">
-        Signing in only reads your subscriptions and public posts — we never post
-        on your behalf. Guests browse public subreddits and can save their own
-        list locally.
+        We only read your subscriptions and public posts. We never post on your
+        behalf. Logging out clears your session.
       </p>
     </main>
   );

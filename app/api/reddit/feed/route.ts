@@ -1,10 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import {
   RedditAuthError,
-  RedditBlockedError,
   RedditRateLimitError,
   getRedditCredentials,
-  publicRedditFetch,
   redditFetch,
 } from "@/lib/reddit/client";
 import { classifyListing } from "@/lib/reddit/classify-media";
@@ -30,30 +28,11 @@ const VALID_RANGES: TimeRange[] = [
 // Reddit's multi-subreddit path tolerates ~100 subs; stay conservative.
 const MAX_SUBS_IN_PATH = 90;
 
-// Default starter feed for anonymous (logged-out) users who haven't saved any
-// subreddits yet. Media-heavy, SFW communities.
-const DEFAULT_PUBLIC_SUBS = [
-  "pics",
-  "aww",
-  "videos",
-  "EarthPorn",
-  "NatureIsFuckingLit",
-  "oddlysatisfying",
-  "BeAmazed",
-  "interestingasfuck",
-  "Damnthatsinteresting",
-  "gifs",
-];
-
 /**
  * GET /api/reddit/feed
  *
- * Works for BOTH authenticated and anonymous users:
- *   - Signed in  → OAuth API; mixed mode uses the user's real subscriptions and
- *                  NSFW is honored per the `nsfw` param.
- *   - Signed out → public `.json` endpoints; mixed mode uses the `subs` param
- *                  (the user's locally-saved list) or a default starter set,
- *                  and NSFW is always off (Reddit hides it from logged-out).
+ * Authenticated only. Mixed mode interleaves the signed-in user's joined
+ * subreddits; single mode browses one subreddit.
  *
  * Query params: mode, subreddit, subs, sort, t, after, nsfw, shuffle.
  */
@@ -67,13 +46,14 @@ export async function GET(req: NextRequest) {
     ? sp.get("t")
     : "day") as TimeRange;
   const after = sp.get("after") ?? undefined;
+  const nsfw = sp.get("nsfw") === "1";
   const doShuffle = sp.get("shuffle") === "1";
 
   try {
     const creds = await getRedditCredentials(req);
-    const authed = !!creds;
-    // NSFW only possible when authenticated.
-    const nsfw = authed && sp.get("nsfw") === "1";
+    if (!creds) {
+      return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+    }
 
     let path: string;
 
@@ -93,9 +73,7 @@ export async function GET(req: NextRequest) {
         .filter(Boolean);
 
       if (subs.length === 0) {
-        subs = authed
-          ? await resolveUserSubreddits(req)
-          : DEFAULT_PUBLIC_SUBS;
+        subs = await resolveUserSubreddits(req);
       }
       if (subs.length === 0) {
         return NextResponse.json<FeedResponse>({ posts: [], after: null });
@@ -104,25 +82,20 @@ export async function GET(req: NextRequest) {
       path = `/r/${joined}/${sort}`;
     }
 
-    const searchParams = {
-      limit: "50",
-      after,
-      t: sort === "top" ? t : undefined,
-    };
-
-    const listing = (authed
-      ? await redditFetch(req, path, { searchParams })
-      : await publicRedditFetch(path, searchParams)) as RedditListing;
+    const listing = (await redditFetch(req, path, {
+      searchParams: {
+        limit: "50",
+        after,
+        t: sort === "top" ? t : undefined,
+      },
+    })) as RedditListing;
 
     let posts = classifyListing(listing.data.children, { nsfw });
     if (doShuffle && mode === "mixed") {
       posts = shuffle(posts);
     }
 
-    const body: FeedResponse = {
-      posts,
-      after: listing.data.after,
-    };
+    const body: FeedResponse = { posts, after: listing.data.after };
     return NextResponse.json(body);
   } catch (err) {
     if (err instanceof RedditAuthError) {
@@ -130,9 +103,6 @@ export async function GET(req: NextRequest) {
     }
     if (err instanceof RedditRateLimitError) {
       return NextResponse.json({ error: "rate_limited" }, { status: 429 });
-    }
-    if (err instanceof RedditBlockedError) {
-      return NextResponse.json({ error: "reddit_blocked" }, { status: 502 });
     }
     console.error("[api/feed]", err);
     return NextResponse.json({ error: "internal_error" }, { status: 500 });

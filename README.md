@@ -12,8 +12,7 @@ OAuth login** and smooth, infinite, snap-scrolling media.
 
 ## Features
 
-- **Login is optional.** Browse as a **guest** (public Reddit `.json`, no account) or **sign in with Reddit** for the personalized version. See [Guest mode vs. signed in](#guest-mode-vs-signed-in).
-- **Continue with Reddit** OAuth2 login (Auth.js) — your Reddit account _is_ your account.
+- **Continue with Reddit** OAuth2 login (Auth.js) — your Reddit account _is_ your account. Login is **required** (Reddit no longer permits unauthenticated access; see [Reddit access requires approval](#reddit-access-requires-approval)).
 - **Vertical snap-scroll feed**, one post per screen, dark immersive UI.
 - **Mixed feed** across all joined subs (batched `/r/sub1+sub2+.../sort`) or a **single subreddit**.
 - **Sort**: Hot / New / Top (hour…all) / Rising, with an optional **shuffle**.
@@ -38,43 +37,25 @@ Zustand · Tailwind CSS · hls.js · lucide-react · Supabase _(optional, see be
 > dormant unless its env vars are provided. See
 > [Re-enabling Supabase later](#re-enabling-supabase-later).
 
-## Guest mode vs. signed in
+## Reddit access requires approval
 
-Reelddit works **without a Reddit login**, so it's usable today even while Data
-API access is pending approval.
-
-| | Guest (no login) | Signed in with Reddit |
-|---|---|---|
-| Data source | Public `.json` endpoints | OAuth Data API |
-| Mixed feed | Your **locally-saved** subreddits (⭐ in search), or a default starter set | Your **actual joined** subreddits (`mysubreddits`) |
-| Browse any public subreddit | ✅ | ✅ |
-| Subreddit search | ✅ | ✅ |
-| NSFW toggle | ❌ (Reddit hides it from logged-out) | ✅ |
-| "Save" subreddits | localStorage only | localStorage (+ real subscriptions) |
-
-Guests build their own feed by searching a subreddit and tapping the **star** to
-save it; saved subreddits persist in `localStorage`. Signing in is purely
-additive — the same UI, now backed by your real subscriptions.
-
-### Reddit access requires credentials (verified)
-
-Reddit's API lockdown is comprehensive — there is **no unauthenticated path**:
+The app is **authenticated-only** — there is no guest/anonymous mode, because
+Reddit's API lockdown leaves **no unauthenticated path** (verified):
 
 - **Server-side from a datacenter IP** (Vercel) → `403` on everything, incl. `.json`, `old.reddit`, and RSS.
 - **Client-side from the browser** → blocked by **CORS** (Reddit no longer sends `Access-Control-Allow-Origin`).
 - **Residential IPs** are throttled/blocked for unauthenticated `.json` too.
 
-So all access goes through the server with an OAuth token:
+So every request goes through the server with the **signed-in user's OAuth
+token** against `oauth.reddit.com`. As of the Responsible Builder Policy update
+(Nov 2025), creating an OAuth app requires **manual approval of a Data API
+access request** — so the app can't talk to Reddit until that's granted and
+`REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET` are set. Until then, login fails at
+Reddit's authorize step.
 
-- **Guest browsing** → an **application-only token** (`client_credentials`
-  grant — the app authenticates itself, no user login) against
-  `oauth.reddit.com`. Needs `REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET`.
-- **Signed in** → the user's OAuth token against `oauth.reddit.com`.
-
-Both require an **approved Reddit app**. Until credentials are set, the feed
-shows a clear "Reddit blocked the request" message. Images are still loaded
-`unoptimized` (directly in the browser — image CDNs aren't blocked) and
-`v.redd.it` video streams via hls.js, so only the listing JSON needs the token.
+Images load `unoptimized` (directly in the browser — image CDNs aren't blocked)
+and `v.redd.it` video streams via hls.js, so only the listing JSON needs the
+token.
 
 ## Project structure
 
